@@ -5,6 +5,7 @@ import "math"
 const analysisWindowSize = 2048
 
 type spectrum struct {
+	rate                      int
 	pcmWindow, pcmRightWindow [analysisWindowSize]float64
 	bands, peaks              [8]float64
 	history                   [4]float64
@@ -82,7 +83,10 @@ func smoothSpectrum(previous, target, dt float64) float64 {
 }
 
 func (s *spectrum) analyzeFrequencyRanges() {
-	const rate = 48000
+	rate := s.rate
+	if rate == 0 {
+		rate = 48000
+	}
 	var left, right [analysisWindowSize]complex128
 	windowPower := 0.0
 	for i, w := range analysisHann {

@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
+
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -23,11 +23,18 @@ type luna struct {
 }
 
 func (l luna) post(ctx context.Context, path string, body any, out any) error {
+	return l.request(ctx, "POST", path, body, out)
+}
+func (l luna) request(ctx context.Context, method, path string, body, out any) error {
 	data, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", l.url+path, bytes.NewReader(data))
+	var payload io.Reader
+	if body != nil {
+		payload = bytes.NewReader(data)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, l.url+path, payload)
 	if err != nil {
 		return err
 	}
@@ -48,27 +55,6 @@ func (l luna) post(ctx context.Context, path string, body any, out any) error {
 	return err
 }
 
-// The stock player creates the dmix segment. Yield if a second playback
-// client joins it, even when the previous track directive is retained.
-func stockPlayerAlone() bool {
-	b, err := os.ReadFile("/proc/sysvipc/shm")
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		f := strings.Fields(line)
-		if len(f) < 7 || f[0] != "1025" || f[3] != "61440" || f[6] != "1" {
-			continue
-		}
-		pid, err := strconv.Atoi(f[4])
-		if err != nil || pid <= 0 {
-			return false
-		}
-		exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
-		return err == nil && exe == "/system/vendor/quasar/maind"
-	}
-	return false
-}
 func observeSpeech(ctx context.Context, l luna, idleUntil *atomic.Int64) {
 	for ctx.Err() == nil {
 		var e struct {
@@ -91,22 +77,22 @@ func observeSpeech(ctx context.Context, l luna, idleUntil *atomic.Int64) {
 		}
 	}
 }
-func frame(rgb [3]float64, s *spectrum, animated bool) []string {
+func frame(rgb [3]float64, s *spectrum, animated bool, count int) []string {
 	if rgb == [3]float64{} {
 		rgb = [3]float64{.22, .22, .27}
 	}
 	levels := [3]float64{s.history[0], math.Max(s.history[1], s.history[2]), s.history[3]}
-	out := make([]string, 6)
+	out := make([]string, count)
 	for i := range out {
 		brightness := .75
 		if animated {
-			brightness = .09 + .9*math.Pow(levels[i/2], 1.3)
+			brightness = .09 + .9*math.Pow(levels[i*3/count], 1.3)
 		}
 		out[i] = fmt.Sprintf("#%02x%02x%02x", int(rgb[0]*255*brightness), int(rgb[1]*255*brightness), int(rgb[2]*255*brightness))
 	}
 	return out
 }
-func run(ctx context.Context, l luna) {
+func run(ctx context.Context, l luna, lights output, mix playbackMix) {
 	var art nativeArtwork
 	go art.watch(ctx)
 	var idleUntil atomic.Int64
@@ -117,8 +103,8 @@ func run(ctx context.Context, l luna) {
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
 	defer func() {
-		if owned && time.Now().UnixNano() < idleUntil.Load() {
-			_ = l.post(context.Background(), "/led/off", struct{}{}, nil)
+		if owned && (lights.fb != nil || time.Now().UnixNano() < idleUntil.Load()) {
+			_ = lights.off(context.Background())
 		}
 	}()
 	for {
@@ -128,23 +114,29 @@ func run(ctx context.Context, l luna) {
 		case <-tick.C:
 			rgb := art.color.Load()
 			if idleUntil.Load() <= time.Now().UnixNano() {
+				if lights.fb != nil && owned && lights.off(ctx) != nil {
+					continue
+				}
 				owned = false
 				continue
 			}
-			if rgb == nil || !stockPlayerAlone() {
+			if rgb == nil || !mix.stockPlayerAlone() {
 				if owned {
-					if err := l.post(ctx, "/led/off", struct{}{}, nil); err == nil {
+					if err := lights.off(ctx); err == nil {
 						owned = false
 					}
 				}
 				continue
 			}
-			animated := sampleMini2Mix(&spectrum, &envelope)
+			animated := mix.sample(&spectrum, &envelope)
 			if time.Now().UnixNano() >= idleUntil.Load() {
+				if lights.fb != nil && owned && lights.off(ctx) != nil {
+					continue
+				}
 				owned = false
 				continue
 			}
-			if err := l.post(ctx, "/led", map[string]any{"colors": frame(*rgb, &spectrum, animated)}, nil); err == nil {
+			if err := lights.draw(ctx, frame(*rgb, &spectrum, animated, lights.count)); err == nil {
 				owned = true
 			}
 		}
@@ -158,5 +150,23 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Start this plugin through Luna")
 		os.Exit(1)
 	}
-	run(ctx, l)
+	lights, err := deviceOutput(ctx, l)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if lights.fb != nil {
+		defer lights.fb.Close()
+	}
+	conf, err := os.ReadFile("/etc/asound.conf")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot read ALSA configuration")
+		return
+	}
+	mix, err := parsePlaybackMix(string(conf))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return
+	}
+	run(ctx, l, lights, mix)
 }

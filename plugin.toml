@@ -1,7 +1,7 @@
 id = "airplay.music-light"
 name = "Свет Яндекс Музыки"
-version = "0.1.0-rc.1"
-description = "Кольцо Мини 2 принимает цвет обложки и пульсирует в такт штатной музыке."
+version = "0.1.0-rc.2"
+description = "Подсветка станции принимает цвет обложки и пульсирует в такт штатной музыке."
 entry = "bin/music-light"
 permissions = ["exec", "led", "ipc.speech"]
 
@@ -11,5 +11,5 @@ mode = "service"
 path = "bin/music-light"
 
 [compatibility]
-models = ["yandexmini_2"]
-features = ["led.ring.rgb", "led.ring.6", "led.color.logical-rgb.v1"]
+models = ["bergamot", "cucumber", "mango", "plum", "yandexmicro", "yandexmidi", "yandexmini", "yandexmini_2", "yandexplum", "yandexstation_2", "yandexmini3", "YandexStationMini"]
+features = []
