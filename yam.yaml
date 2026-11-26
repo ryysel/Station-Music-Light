@@ -1,5 +1,5 @@
 name: airplay/music-light
-version: 0.1.0-rc.3
+version: 0.1.0
 license: MIT
 homepage: https://github.com/ryysel/Station-Music-Light
 description: Подсветка кольца под обложку и ритм штатной Яндекс Музыки на станциях с RGB-индикацией.
