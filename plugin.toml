@@ -1,6 +1,6 @@
 id = "airplay.music-light"
 name = "Свет Яндекс Музыки"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.3"
 description = "Подсветка станции принимает цвет обложки и пульсирует в такт штатной музыке."
 entry = "bin/music-light"
 permissions = ["exec", "led", "ipc.speech"]
