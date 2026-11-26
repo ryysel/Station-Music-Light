@@ -1,0 +1,12 @@
+name: airplay/music-light
+version: 0.1.0-rc.1
+license: MIT
+homepage: https://github.com/ryysel/Station-Music-Light
+description: Подсветка кольца под обложку и ритм штатной Яндекс Музыки на Станции Мини 2.
+targets: [yandexmini_2]
+depends: ["yam/luna >=0.2.39"]
+files:
+  share/luna/plugins/airplay.music-light/plugin.toml: plugin.toml
+  share/luna/plugins/airplay.music-light/bin/music-light: build/music-light
+  share/luna/plugins/airplay.music-light/licenses/: licenses/
+  share/luna/plugins/airplay.music-light/LICENSE: LICENSE
